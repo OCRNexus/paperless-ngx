@@ -378,16 +378,10 @@ class DocumentTypeViewSet(ModelViewSet, PermissionsAwareDocumentCountMixin):
     ),
     history=extend_schema(
         description="View the document history",
-        parameters=[
-            OpenApiParameter(
-                name="id",
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.PATH,
-            ),
-        ],
         responses={
             200: inline_serializer(
                 name="LogEntry",
+                many=True,
                 fields={
                     "id": serializers.IntegerField(),
                     "timestamp": serializers.DateTimeField(),
@@ -409,13 +403,6 @@ class DocumentTypeViewSet(ModelViewSet, PermissionsAwareDocumentCountMixin):
     ),
     metadata=extend_schema(
         description="View the document metadata",
-        parameters=[
-            OpenApiParameter(
-                name="id",
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.PATH,
-            ),
-        ],
         responses={
             200: inline_serializer(
                 name="Metadata",
@@ -441,29 +428,15 @@ class DocumentTypeViewSet(ModelViewSet, PermissionsAwareDocumentCountMixin):
     ),
     notes=extend_schema(
         description="View, add, or delete notes for the document",
-        parameters=[
-            OpenApiParameter(
-                name="id",
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-            ),
-        ],
         responses={
             200: inline_serializer(
                 name="Note",
+                many=True,
                 fields={
                     "id": serializers.IntegerField(),
                     "note": serializers.CharField(),
                     "created": serializers.DateTimeField(),
-                    "user": inline_serializer(
-                        name="User",
-                        fields={
-                            "id": serializers.IntegerField(),
-                            "username": serializers.CharField(),
-                            "first_name": serializers.CharField(),
-                            "last_name": serializers.CharField(),
-                        },
-                    ),
+                    "user": UserSerializer(),
                 },
             ),
             400: None,
@@ -473,13 +446,6 @@ class DocumentTypeViewSet(ModelViewSet, PermissionsAwareDocumentCountMixin):
     ),
     suggestions=extend_schema(
         description="View suggestions for the document",
-        parameters=[
-            OpenApiParameter(
-                name="id",
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.PATH,
-            ),
-        ],
         responses={
             200: inline_serializer(
                 name="Suggestions",
@@ -504,17 +470,14 @@ class DocumentTypeViewSet(ModelViewSet, PermissionsAwareDocumentCountMixin):
     ),
     thumb=extend_schema(
         description="View the document thumbnail",
-        parameters=[
-            OpenApiParameter(
-                name="id",
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.PATH,
-            ),
-        ],
         responses={200: OpenApiTypes.BINARY},
     ),
     preview=extend_schema(
         description="View the document preview",
+        responses={200: OpenApiTypes.BINARY},
+    ),
+    share_links=extend_schema(
+        description="View share links for the document",
         parameters=[
             OpenApiParameter(
                 name="id",
@@ -522,7 +485,12 @@ class DocumentTypeViewSet(ModelViewSet, PermissionsAwareDocumentCountMixin):
                 location=OpenApiParameter.PATH,
             ),
         ],
-        responses={200: OpenApiTypes.BINARY},
+        responses={
+            200: ShareLinkSerializer(many=True),
+            400: None,
+            403: None,
+            404: None,
+        },
     ),
 )
 class DocumentViewSet(
@@ -658,7 +626,7 @@ class DocumentViewSet(
         else:
             return None
 
-    @action(methods=["get"], detail=True)
+    @action(methods=["get"], detail=True, filter_backends=[])
     @method_decorator(
         condition(etag_func=metadata_etag, last_modified_func=metadata_last_modified),
     )
@@ -716,7 +684,7 @@ class DocumentViewSet(
 
         return Response(meta)
 
-    @action(methods=["get"], detail=True)
+    @action(methods=["get"], detail=True, filter_backends=[])
     @method_decorator(
         condition(
             etag_func=suggestions_etag,
@@ -766,7 +734,7 @@ class DocumentViewSet(
 
         return Response(resp_data)
 
-    @action(methods=["get"], detail=True)
+    @action(methods=["get"], detail=True, filter_backends=[])
     @method_decorator(cache_control(public=False, max_age=5 * 60))
     @method_decorator(
         condition(etag_func=preview_etag, last_modified_func=preview_last_modified),
@@ -778,7 +746,7 @@ class DocumentViewSet(
         except (FileNotFoundError, Document.DoesNotExist):
             raise Http404
 
-    @action(methods=["get"], detail=True)
+    @action(methods=["get"], detail=True, filter_backends=[])
     @method_decorator(cache_control(public=False, max_age=CACHE_50_MINUTES))
     @method_decorator(last_modified(thumbnail_last_modified))
     def thumb(self, request, pk=None):
@@ -837,6 +805,7 @@ class DocumentViewSet(
         methods=["get", "post", "delete"],
         detail=True,
         permission_classes=[PaperlessNotePermissions],
+        filter_backends=[],
     )
     def notes(self, request, pk=None):
         currentUser = request.user
@@ -944,7 +913,7 @@ class DocumentViewSet(
             },
         )
 
-    @action(methods=["get"], detail=True)
+    @action(methods=["get"], detail=True, filter_backends=[])
     def share_links(self, request, pk=None):
         currentUser = request.user
         try:
@@ -962,21 +931,16 @@ class DocumentViewSet(
 
         if request.method == "GET":
             now = timezone.now()
-            links = [
-                {
-                    "id": c.pk,
-                    "created": c.created,
-                    "expiration": c.expiration,
-                    "slug": c.slug,
-                }
-                for c in ShareLink.objects.filter(document=doc)
+            links = (
+                ShareLink.objects.filter(document=doc)
                 .only("pk", "created", "expiration", "slug")
                 .exclude(expiration__lt=now)
                 .order_by("-created")
-            ]
-            return Response(links)
+            )
+            serializer = ShareLinkSerializer(links, many=True)
+            return Response(serializer.data)
 
-    @action(methods=["get"], detail=True, name="Audit Trail")
+    @action(methods=["get"], detail=True, name="Audit Trail", filter_backends=[])
     def history(self, request, pk=None):
         if not settings.AUDIT_LOG_ENABLED:
             return HttpResponseBadRequest("Audit log is disabled")
