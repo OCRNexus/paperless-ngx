@@ -263,6 +263,29 @@ class PermissionsAwareDocumentCountMixin(PassUserMixin):
         )
 
 
+full_perms_schema = {
+    "list": extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="full_perms",
+                type=OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+            ),
+        ],
+    ),
+    "retrieve": extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="full_perms",
+                type=OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+            ),
+        ],
+    ),
+}
+
+
+@extend_schema_view(**full_perms_schema)
 class CorrespondentViewSet(ModelViewSet, PermissionsAwareDocumentCountMixin):
     model = Correspondent
 
@@ -299,6 +322,7 @@ class CorrespondentViewSet(ModelViewSet, PermissionsAwareDocumentCountMixin):
         return super().retrieve(request, *args, **kwargs)
 
 
+@extend_schema_view(**full_perms_schema)
 class TagViewSet(ModelViewSet, PermissionsAwareDocumentCountMixin):
     model = Tag
 
@@ -323,6 +347,7 @@ class TagViewSet(ModelViewSet, PermissionsAwareDocumentCountMixin):
     ordering_fields = ("color", "name", "matching_algorithm", "match", "document_count")
 
 
+@extend_schema_view(**full_perms_schema)
 class DocumentTypeViewSet(ModelViewSet, PermissionsAwareDocumentCountMixin):
     model = DocumentType
 
@@ -341,6 +366,36 @@ class DocumentTypeViewSet(ModelViewSet, PermissionsAwareDocumentCountMixin):
 
 
 @extend_schema_view(
+    list=extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="full_perms",
+                type=OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+            ),
+            OpenApiParameter(
+                name="fields",
+                type=OpenApiTypes.STR,
+                many=True,
+                location=OpenApiParameter.QUERY,
+            ),
+        ],
+    ),
+    retrieve=extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="full_perms",
+                type=OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+            ),
+            OpenApiParameter(
+                name="fields",
+                type=OpenApiTypes.STR,
+                many=True,
+                location=OpenApiParameter.QUERY,
+            ),
+        ],
+    ),
     download=extend_schema(
         description="Download the document",
         parameters=[
@@ -1951,6 +2006,7 @@ class BulkDownloadView(GenericAPIView):
             return response
 
 
+@extend_schema_view(**full_perms_schema)
 class StoragePathViewSet(ModelViewSet, PermissionsAwareDocumentCountMixin):
     model = StoragePath
 
